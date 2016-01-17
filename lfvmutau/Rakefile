@@ -26,18 +26,20 @@ end
 samples = Hash[
   "HiggsGG" => get_sample_names('GluGlu'),
   "HiggsVBF" => get_sample_names('VBF'),
-  "TTBar" =>  get_sample_names('TT'),
+  "TTBar" =>  get_sample_names('TT_'),
   "WJets" =>  get_sample_names('WJets'),
-  "DYJets" =>  get_sample_names('DY'),
+  "DYJets" =>  get_sample_names('DYJetsToLL_M-50'),
+  "ZTauTauMC" =>  get_sample_names('ZTauTau'),
   #"SMHiggs" =>  Array['GluGluToHToTauTau_M-125_13TeV-powheg-pythia6','VBF_HToTauTau_M-125_13TeV-powheg-pythia6'],
-  "SingleTop" => get_sample_names('ST'),
+  #"SingleTop" => get_sample_names('ST'),
   #"DiBoson" => Array['WWTo2L2Nu_13TeV-powheg','WZ_TuneCUETP8M1_13TeV-pythia8','ZZ_TuneCUETP8M1_13TeV-pythia8']
-  "DiBoson" => Array['WW_TuneCUETP8M1_13TeV-pythia8','WZ_TuneCUETP8M1_13TeV-pythia8','ZZTo2L2Nu_13TeV_powheg_pythia8'],
+  "DiBoson" => Array['WW_TuneCUETP8M1_13TeV-pythia8','WZ_TuneCUETP8M1_13TeV-pythia8','ZZ_TuneCUETP8M1_13TeV-pythia8'],
   "Data2015C" => get_sample_names('2015C'),
   "Data2015D" => get_sample_names('2015D')
 ]
 
 # Function to get the .root files for an analyzer and samples
+
 def get_analyzer_results(analyzer, the_samples)
   output = Array.new
   analyzer_base = analyzer.sub('.py', '')
@@ -47,6 +49,7 @@ def get_analyzer_results(analyzer, the_samples)
   return output
 end
 
+
 ################################################################################
 ## Recipes to analyze the GG channel of the LFV HToMuTau analysis
 ##  targets:
@@ -54,7 +57,14 @@ end
 ################################################################################
 
 ##use $PU = false for samples with no pileup
-task :analyzeSpring2015 => get_analyzer_results( "AnalyzeLFVMuTau.py",samples['SingleTop']+samples['DiBoson']+samples['WJets']+samples['TTBar']+samples['HiggsGG']+samples['HiggsVBF']+samples['DYJets']+samples['Data2015C']+samples['Data2015D'])
+task :signal  => get_analyzer_results( "AnalyzeLFVMuTau.py",samples['HiggsGG']+samples['HiggsVBF'])
+task :mutauMCNOPU => get_analyzer_results( "AnalyzeLFVMuTauNOPU.py",samples['DYJets'])
+task :ztautauMC => get_analyzer_results( "AnalyzeLFVMuTau.py",samples['ZTauTauMC'])
+task :mutauMC => get_analyzer_results( "AnalyzeLFVMuTau.py",samples['WJets']+samples['DiBoson']+samples['TTBar']+samples['HiggsGG']+samples['HiggsVBF']+samples['DYJets'])
+task :mutauData  => get_analyzer_results( "AnalyzeLFVMuTau.py",samples['Data2015C']+samples['Data2015D'])
+task :muons => get_analyzer_results( "AnalyzeLFVMuMu.py" , samples['DYJets']+samples['Data2015C']+samples['Data2015D'])
+task :mumutau => get_analyzer_results( "AnalyzeLFVMuMuTau.py" , samples['DYJets']+samples['DiBoson']+samples['TTBar'])
+task :mumutauData => get_analyzer_results( "AnalyzeLFVMuMuTau.py" , samples['DYJets']+samples['Data2015C']+samples['Data2015D']+samples['DiBoson']+samples['TTBar'])
 
 #task :analyzetest2  => get_analyzer_results(  "AnalyzeLFVMuTauLoose.py",samples['signal'])
 #task :analyzetest2Bg  => get_analyzer_results(  "AnalyzeLFVMuTauLoose.py",samples['TTBar']+samples['WJets']+samples['DYJets']+samples['SMHiggs'])

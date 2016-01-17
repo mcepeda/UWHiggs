@@ -18,6 +18,9 @@ import math
 
 from math import sqrt, pi
 
+data=bool ('true' in os.environ['isRealData'])
+ZTauTau=  int(os.environ['isZTauTau'])
+
 def deltaPhi(phi1, phi2):
   PHI = abs(phi1-phi2)
   if PHI<=pi:
@@ -76,9 +79,19 @@ def collMass_type1(row):
         return mass
 
 
-################################################################################
-#### MC-DATA and PU corrections ################################################
-################################################################################
+pu_distributions = glob.glob(os.path.join(
+#    'inputs', os.environ['jobid'], 'data_TauPlusX*pu.root'))
+        'inputs', os.environ['jobidpu'], 'data_SingleMu*pu.root'))
+pu_corrector = PileupWeight.PileupWeight('Asympt25ns', *pu_distributions)
+
+
+def fakeWeight(row):
+          if row.tDecayMode==0:
+            return 0.62 # 0.81
+          if row.tDecayMode==1:
+             return 0.76 #0.80
+          if row.tDecayMode==10:
+            return 0.44 #0.44
 
 class AnalyzeLFVMuTau(MegaBase):
     tree = 'mt/final/Ntuple'
@@ -97,13 +110,16 @@ class AnalyzeLFVMuTau(MegaBase):
          #     "newisotight","newisoloose","newisogg","newisoboost","newisovbf",  "newisoloosegg","newisolooseboost","newisoloosevbf",
           #    "noisogg","noisoboost","noisovbf",
           #    "noTauID","noiso"]
-        names=["preselection"]
+        names=["preselection","preselectionSS", "notIso","notIsoNotWeightedSS","notIsoSS","gg","boost","vbf","ggNotIso","boostNotIso","vbfNotIso","notIsoNotWeighted",
+               "preselection0Jet", "preselection1Jet", "preselection2Jet","notIso0Jet", "notIso1Jet","notIso2Jet"]
         namesize = len(names)
 	for x in range(0,namesize):
 
+
             self.book(names[x], "weight", "Event weight", 100, 0, 5)
             self.book(names[x], "GenWeight", "Gen level weight", 200000 ,-1000000, 1000000)
-    
+            self.book(names[x], "genHTT", "genHTT", 1000 ,0,1000)
+ 
             self.book(names[x], "rho", "Fastjet #rho", 100, 0, 25)
             self.book(names[x], "nvtx", "Number of vertices", 100, -0.5, 100.5)
             self.book(names[x], "prescale", "HLT prescale", 21, -0.5, 20.5)
@@ -122,12 +138,12 @@ class AnalyzeLFVMuTau(MegaBase):
  
             self.book(names[x], "mPt", "Muon  Pt", 300,0,300)
             self.book(names[x], "mEta", "Muon  eta", 100, -2.5, 2.5)
-            self.book(names[x], "mMtToPfMet_Ty1", "Muon MT (PF Ty1)", 200, 0, 200)
+            self.book(names[x], "mMtToPfMet_type1", "Muon MT (PF Ty1)", 200, 0, 200)
             self.book(names[x], "mCharge", "Muon Charge", 5, -2, 2)
 
             self.book(names[x], "tPt", "Tau  Pt", 300,0,300)
             self.book(names[x], "tEta", "Tau  eta", 100, -2.5, 2.5)
-            self.book(names[x], "tMtToPfMet_Ty1", "Tau MT (PF Ty1)", 200, 0, 200)
+            self.book(names[x], "tMtToPfMet_type1", "Tau MT (PF Ty1)", 200, 0, 200)
             self.book(names[x], "tCharge", "Tau  Charge", 5, -2, 2)
 	    self.book(names[x], "tJetPt", "Tau Jet Pt" , 500, 0 ,500)	    
             self.book(names[x], "tMass", "Tau  Mass", 1000, 0, 10)
@@ -188,7 +204,10 @@ class AnalyzeLFVMuTau(MegaBase):
 
             self.book(names[x], 'mPixHits', 'Mu 1 pix hits', 10, -0.5, 9.5)
             self.book(names[x], 'mJetBtag', 'Mu 1 JetBtag', 100, -5.5, 9.5)
-    	   
+    	  
+            self.book(names[x],"collMass_type1_1","collMass_type1_1",500,0,500);
+            self.book(names[x],"collMass_type1_2","collMass_type1_2",500,0,500);
+
             self.book(names[x],"collMass_type1","collMass_type1",500,0,500);
             self.book(names[x],"fullMT_type1","fullMT_type1",500,0,500);
             self.book(names[x],"fullPT_type1","fullPT_type1",500,0,500);	    
@@ -238,15 +257,22 @@ class AnalyzeLFVMuTau(MegaBase):
 
 	     
 
-    def fill_histos(self, row,name='gg'):
+    def fill_histos(self, row,name='gg', fakeRate=False):
         histos = self.histograms
         weight=1
-        if (row.GenWeight>=0):
-          weight=1
-        else:
-          weight=-1
+        if (row.GenWeight!=1 and row.GenWeight!=0):
+          weight=row.GenWeight
+
+        if (fakeRate==True):
+           weight=weight*fakeWeight(row)
+
+        if (not data):
+           weight*=pu_corrector(row.nTruePU)
+
+
         histos[name+'/weight'].Fill(weight)
         histos[name+'/GenWeight'].Fill(row.GenWeight)
+        histos[name+'/genHTT'].Fill(row.genHTT)
         histos[name+'/rho'].Fill(row.rho, weight)
         histos[name+'/nvtx'].Fill(row.nvtx, weight)
         histos[name+'/prescale'].Fill(row.doubleMuPrescale, weight)
@@ -263,11 +289,11 @@ class AnalyzeLFVMuTau(MegaBase):
 
         histos[name+'/mPt'].Fill(row.mPt, weight)
         histos[name+'/mEta'].Fill(row.mEta, weight)
-        histos[name+'/mMtToPfMet_Ty1'].Fill(row.mMtToPfMet_Ty1,weight)
+        histos[name+'/mMtToPfMet_type1'].Fill(row.mMtToPfMet_type1,weight)
         histos[name+'/mCharge'].Fill(row.mCharge, weight)
         histos[name+'/tPt'].Fill(row.tPt, weight)
         histos[name+'/tEta'].Fill(row.tEta, weight)
-        histos[name+'/tMtToPfMet_Ty1'].Fill(row.tMtToPfMet_Ty1,weight)
+        histos[name+'/tMtToPfMet_type1'].Fill(row.tMtToPfMet_type1,weight)
         histos[name+'/tCharge'].Fill(row.tCharge, weight)
 	histos[name+'/tJetPt'].Fill(row.tJetPt, weight)
 
@@ -327,6 +353,9 @@ class AnalyzeLFVMuTau(MegaBase):
 
 	histos[name+'/LT'].Fill(row.LT,weight)
 
+        histos[name+'/collMass_type1_1'].Fill(row.m_t_collinearmass,weight)
+        histos[name+'/collMass_type1_2'].Fill(row.t_m_collinearmass,weight)
+
         histos[name+'/collMass_type1'].Fill(collMass_type1(row),weight)
         histos[name+'/fullMT_type1'].Fill(fullMT(row.type1_pfMetEt,row.mPt,row.tPt,row.type1_pfMetPhi, row.mPhi, row.tPhi),weight)
         histos[name+'/fullPT_type1'].Fill(fullPT(row.type1_pfMetEt,row.mPt,row.tPt,row.type1_pfMetPhi, row.mPhi, row.tPhi),weight) 
@@ -376,35 +405,32 @@ class AnalyzeLFVMuTau(MegaBase):
 
 
 
-
     def presel(self, row):
-        if not row.isoMu24eta2p1Pass:
+        if not row.singleIsoMu20Pass:
             return False
         return True
 
     def kinematics(self, row):
         #if row.mPt < 30:
         #    return False
-        if row.mPt < 25:
+        if row.mPt < 30:
              return False
         if abs(row.mEta) >= 2.1:
             return False
-        if row.tPt<20 :
+        if row.tPt<30 :
             return False
         if abs(row.tEta)>=2.5 :
             return False
         return True
 
     def gg(self,row):
-       if row.mPt < 50:
+       if row.mPt < 45:    # there was a typo in the PAS!
            return False
        if deltaPhi(row.mPhi, row.tPhi) <2.7:
            return False
-       if row.mPt < 45:
-           return False
        if row.tPt < 35:
            return False
-       if row.tMtToPfMet_Ty1 > 50:
+       if row.tMtToPfMet_type1 > 50:
            return False
        if row.jetVeto30!=0:
            return False
@@ -417,18 +443,22 @@ class AnalyzeLFVMuTau(MegaBase):
                 return False
           if row.tPt < 40:
                 return False
-          if row.tMtToPfMet_Ty1 > 35:
+          if row.tMtToPfMet_type1 > 50:
                 return False
           return True
 
     def vbf(self,row):
+        if row.tPt < 40:
+                return False
+        if row.tMtToPfMet_type1 > 50:
+                return False
         if row.jetVeto30<2:
             return False
 	if(row.vbfNJets<2):
 	    return False
 	if(abs(row.vbfDeta)<3.5):
 	    return False
-        if row.vbfMass < 600:
+        if row.vbfMass < 550:
 	    return False
         if row.vbfJetVeto30 > 0:
             return False
@@ -487,8 +517,14 @@ class AnalyzeLFVMuTau(MegaBase):
             if sel==True:
                 continue
 
-            if not self.oppositesign(row):
-                continue   
+            if not self.presel(row):
+               continue 
+
+            if ZTauTau==1 and not row.isZtautau:
+               continue
+            if ZTauTau==-1 and row.isZtautau:
+               continue
+
 
             if not self.kinematics(row): 
                 continue
@@ -504,75 +540,60 @@ class AnalyzeLFVMuTau(MegaBase):
 
             #self.fill_histos(row,'noTauID')
 
-            #if not self.obj2_id (row):
-            #    continue
+            if not self.obj2_id (row):
+                continue
+
+            if not self.obj2_looseiso(row):
+                continue
 
             #self.fill_histos(row,'noiso')
 
-            if self.obj2_iso(row):
-              self.fill_histos(row,'preselection')
-#              self.fill_histos(row,'oldisotight')
-#
-#              if self.gg(row):
-#                  self.fill_histos(row,'oldisogg')
-#
-#              if self.boost(row):
-#                  self.fill_histos(row,'oldisoboost')
-#
-#              if self.vbf(row):
-#                  self.fill_histos(row,'oldisovbf')
-# 
-#            elif self.obj2_looseiso(row):
-#
-#              self.fill_histos(row,'oldisoloose')
-#
-#              if self.gg(row):
-#                  self.fill_histos(row,'oldisoloosegg')
-#
-#              if self.boost(row):
-#                  self.fill_histos(row,'oldisolooseboost')
-#
-#              if self.vbf(row):
-#                  self.fill_histos(row,'oldisoloosevbf')
-#
-#
-#            if self.obj2_newiso(row):
-#
-#              self.fill_histos(row,'newisotight')
-#
-#              if self.gg(row):
-#                  self.fill_histos(row,'newisogg')
-#
-#              if self.boost(row):
-#                  self.fill_histos(row,'newisoboost')
-#
-#              if self.vbf(row):
-#                  self.fill_histos(row,'newisovbf')
-#
-#            elif self.obj2_newlooseiso(row):
-#              
-#              self.fill_histos(row,'newisoloose')
-#
-#              if self.gg(row):
-#                  self.fill_histos(row,'newisoloosegg')
-#
-#              if self.boost(row):
-#                  self.fill_histos(row,'newisolooseboost')
-#
-#              if self.vbf(row):
-#                  self.fill_histos(row,'newisoloosevbf')
-#
-#
-#            if self.gg(row):
-#                self.fill_histos(row,'noisogg')
-#
-#            if self.boost(row):
-#                self.fill_histos(row,'noisoboost')
-#
-#            if self.vbf(row):
-#                self.fill_histos(row,'noisovbf')
-#
-            
+            if self.obj2_iso(row) and not self.oppositesign(row):
+              self.fill_histos(row,'preselectionSS',False)
+
+            if not self.obj2_iso(row) and not self.oppositesign(row):
+              self.fill_histos(row,'notIsoSS',True)
+              self.fill_histos(row,'notIsoNotWeightedSS',False)
+
+            if self.obj2_iso(row) and self.oppositesign(row):  
+
+              self.fill_histos(row,'preselection',False)
+              if row.jetVeto30==0:
+                self.fill_histos(row,'preselection0Jet',False)
+              if row.jetVeto30==1:
+                self.fill_histos(row,'preselection1Jet',False)
+              if row.jetVeto30==2:
+                self.fill_histos(row,'preselection2Jet',False)
+
+              if self.gg(row):
+                  self.fill_histos(row,'gg',False)
+
+              if self.boost(row):
+                  self.fill_histos(row,'boost',False)
+
+              if self.vbf(row):
+                  self.fill_histos(row,'vbf',False)
+
+            if not self.obj2_iso(row) and self.oppositesign(row):
+              self.fill_histos(row,'notIso',True)
+              self.fill_histos(row,'notIsoNotWeighted',False)
+
+              if row.jetVeto30==0:
+                self.fill_histos(row,'notIso0Jet',True)
+              if row.jetVeto30==1:
+                self.fill_histos(row,'notIso1Jet',True)
+              if row.jetVeto30==2:
+                self.fill_histos(row,'notIso2Jet',True)
+
+              if self.gg(row):
+                  self.fill_histos(row,'ggNotIso',True)
+
+              if self.boost(row):
+                  self.fill_histos(row,'boostNotIso',True)
+
+              if self.vbf(row):
+                  self.fill_histos(row,'vbfNotIso',True)
+
 
             sel=True
 
